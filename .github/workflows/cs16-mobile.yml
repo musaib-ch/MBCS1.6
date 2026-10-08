@@ -1,0 +1,68 @@
+name: CS 1.6 mobile (Android + iOS)
+on:
+  workflow_dispatch:
+  push:
+    branches: [ main, master ]
+
+env:
+  SDL_VERSION: 2.32.10
+
+jobs:
+  android:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout engine (Xash3D FWGS)
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Checkout CS 1.6 client
+        run: git clone --recursive --depth 1 https://github.com/Velaron/cs16-client cs16-client
+      - uses: actions/setup-java@v4
+        with:
+          java-version: 17
+          distribution: temurin
+          cache: gradle
+      - name: Build engine APK
+        working-directory: android
+        run: ./gradlew assembleContinuous --no-daemon
+      - name: Build CS16 client APK
+        working-directory: cs16-client/android
+        run: ./gradlew assembleGitDebug --no-daemon
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          cp android/app/build/outputs/apk/continuous/app-continuous.apk artifacts/xash3d-fwgs-android.apk
+          cp cs16-client/android/app/build/outputs/apk/git/debug/app-git-debug.apk artifacts/cs16-client-android.apk
+      - uses: actions/upload-artifact@v4
+        with:
+          name: android
+          path: artifacts/
+
+  ios:
+    runs-on: macos-latest
+    steps:
+      - name: Checkout engine (Xash3D FWGS)
+        uses: actions/checkout@v5
+        with:
+          submodules: recursive
+      - name: Build SDL2 framework for iOS
+        run: |
+          git clone https://github.com/libsdl-org/SDL -b "release-$SDL_VERSION"
+          cd SDL/Xcode/SDL
+          xcodebuild -scheme xcFramework-iOS -target xcFramework-iOS build -configuration Release
+          sudo cp -vr Products/SDL2.xcframework/ios-arm64/SDL2.framework /Library/Frameworks
+      - name: Build engine
+        run: ./waf configure --enable-lto --ios build install --destdir=build/ios
+      - name: Stage SDL2 framework
+        run: cp -vr /Library/Frameworks/SDL2.framework ./build
+      - name: Build CS16 client + package IPA (upstream script)
+        # clones Velaron/cs16-client, builds it for iPhoneOS, then runs createipa.sh
+        run: ./scripts/ios/buildcs16.sh
+      - name: Collect artifacts
+        run: |
+          mkdir -p artifacts
+          mv build/xash3d.ipa artifacts/xash3d-cs16-ios-arm64.ipa
+      - uses: actions/upload-artifact@v4
+        with:
+          name: ios
+          path: artifacts/
