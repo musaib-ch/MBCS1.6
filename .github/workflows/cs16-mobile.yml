@@ -25,11 +25,13 @@ jobs:
         run: git clone --recursive --depth 1 https://github.com/Velaron/cs16-client cs16-client
       - uses: actions/setup-java@v4
         with:
-          java-version: 17
+          java-version: 21
           distribution: temurin
       - name: Build CS16 client APK
         working-directory: cs16-client/android
         run: |
+          # cs16-client pins a JetBrains JDK auto-download (foojay.io) that returns HTTP 400 on CI; use the runner's JDK 21 instead
+          rm -f gradle/gradle-daemon-jvm.properties
           unset ANDROID_HOME ANDROID_SDK_ROOT
           export ANDROID_HOME=$GITHUB_WORKSPACE/sdk
           ./gradlew assembleGitDebug --no-daemon
